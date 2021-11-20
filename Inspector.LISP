@@ -1,0 +1,88 @@
+;;Dopsat settable, dvojklik, otestovat (g)
+(defmethod settable-properties ((p point))
+  '(x y r phi color thickness))
+
+(defmethod settable-properties ((c circle))
+  '(center r color filledp thickness))
+
+(defmethod settable-properties ((p polygon))
+  '(items closedp color thickness filledp))
+
+(defclass inspector-window (abstract-window)
+  ((inspected-window :initform nil)
+   (inspected-object :initform nil)))
+
+(defmethod inspected-window ((ins inspector-window))
+  (slot-value ins 'inspected-window))
+
+(defmethod set-inspected-window ((ins inspector-window) window)
+  (when (inspected-window ins)
+    (set-delegate (slot-value ins 'inspected-window) nil))
+  (setf (slot-value ins 'inspected-window) window)
+  (setf (slot-value ins 'inspected-object) window)
+  (set-delegate window ins)
+  (display ins window))
+
+(defmethod inspected-object ((ins inspector-window))
+  (slot-value ins 'inspected-object))
+
+(defmethod display ((ins inspector-window) object)
+  (let ((settable-properties (settable-properties object))
+        (i 1)
+        (shape '()))
+    (dolist (property settable-properties)
+      (setf shape (cons (move 
+                         (set-button-text 
+                          (make-instance 'button)
+                          (format nil "~a - ~a" property (funcall property object)))
+                         5 (* i 30))
+                        shape))
+      (incf i)
+      (do-set-shape ins (set-items (make-instance 'picture) shape))
+      (invalidate ins))))
+  
+;;Přejmenovat eventy?
+(defmethod ev-mouse-down ((ins inspector-window) sender clicked button position)
+  (when (eql (slot-value ins 'inspected-window) sender)
+    (setf (slot-value ins 'inspected-object) clicked)
+    (display ins clicked))
+  (when (find clicked (items (shape ins))) ;Button clicked 
+    (change-property ins clicked)))
+
+(defmethod change-property ((ins inspector-window) object)
+  (let ((i 0))
+    (dolist (btn (reverse (items (shape ins))))
+      (when (eql btn object)
+        (set-property ins (inspected-object ins) (print i)))
+        (incf i))))
+
+(defmethod set-property ((ins inspector-window) object nth)
+  (let ((setter (setter-name (nth nth (settable-properties object))))
+        (value (multiple-value-list(capi:prompt-for-value "Zadejte novou hodnotu"))))
+    (when (cadr value)
+      (funcall setter object (car value)))))
+
+(defun setter-name (prop)
+  (values (find-symbol (format nil "SET-~a" prop))))
+  
+(defmethod ev-change ((ins inspector-window) sender)
+  (display ins (slot-value ins 'inspected-object)))
+
+
+(defclass inspected-window (window)
+  ())
+
+(defmethod settable-properties ((win inspected-window))
+  '(background shape))
+
+(defmethod mouse-down-no-shape ((w inspected-window) button position)
+  (send-event w 'ev-mouse-down w button position)
+  w)
+
+
+#|
+
+(setf ins (make-instance 'inspector-window))
+(setf inp (make-instance 'inspected-window))
+(set-inspected-window ins inp)
+|#
